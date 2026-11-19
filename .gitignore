@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Test and tool caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.idea/
+.vscode/
+.settings
+.vs/
+
+# OS and editor backups
+.DS_Store
+*~
+*.swp
+*.swo
+
+# Logs and compiled translations
+*.log
+*.mo

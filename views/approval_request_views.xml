@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="approval_request_view_form_manpower" model="ir.ui.view">
+        <field name="name">approval.request.form.manpower</field>
+        <field name="model">approval.request</field>
+        <field name="inherit_id" ref="approvals.approval_request_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//header/field[@name='request_status']" position="before">
+                <field name="manpower_unfilled_headcount" invisible="1"/>
+                <button name="action_fill_manpower_seats" type="object" string="Fill seats"
+                    class="btn-primary" groups="hr.group_hr_user"
+                    invisible="not is_manpower_request or request_status != 'approved' or manpower_unfilled_headcount &lt; 1"/>
+            </xpath>
+            <xpath expr="//div[hasclass('oe_title')]" position="before">
+                <field name="is_manpower_request" invisible="1"/>
+                <div class="o_manpower_plan_card border rounded p-3 mb-3" invisible="not is_manpower_request">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h3 class="mb-0">Manpower Plan Verification</h3>
+                            <div class="text-muted" invisible="not active_plan_name">
+                                <field name="active_plan_name" nolabel="1" class="oe_inline"/>
+                                <button name="action_open_active_plan" type="object" string="Open plan"
+                                    class="btn btn-link p-0 align-baseline" invisible="not active_plan_id"
+                                    groups="hr.group_hr_user"/>
+                                <field name="active_plan_id" invisible="1" groups="hr.group_hr_user"/>
+                            </div>
+                        </div>
+                        <field name="quota_status" widget="badge" nolabel="1"
+                            decoration-success="quota_status == 'within_plan'"
+                            decoration-danger="quota_status == 'exceeds_plan'"
+                            decoration-warning="quota_status == 'no_plan'"/>
+                    </div>
+                    <div class="row g-2 text-center">
+                        <div class="col">
+                            <div class="border rounded p-2 h-100">
+                                <div class="text-muted small">Planned</div>
+                                <div class="fs-3 fw-bold"><field name="planned_headcount" nolabel="1"/></div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="border rounded p-2 h-100">
+                                <div class="text-muted small">Current</div>
+                                <div class="fs-3 fw-bold"><field name="actual_headcount" nolabel="1"/></div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="border rounded p-2 h-100">
+                                <div class="text-muted small">Pipeline</div>
+                                <div class="fs-3 fw-bold"><field name="pipeline_headcount" nolabel="1"/></div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="border rounded p-2 h-100">
+                                <div class="text-muted small">Requested</div>
+                                <div class="fs-3 fw-bold">
+                                    <field name="requested_headcount" nolabel="1" readonly="request_status != 'new'"/>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="border rounded p-2 h-100">
+                                <div class="text-muted small">Net Remaining</div>
+                                <div class="fs-3 fw-bold text-success" invisible="quota_status != 'within_plan'">
+                                    <field name="forecast_balance" nolabel="1"/>
+                                </div>
+                                <div class="fs-3 fw-bold text-danger" invisible="quota_status != 'exceeds_plan'">
+                                    <field name="forecast_balance" nolabel="1"/>
+                                </div>
+                                <div class="fs-3 fw-bold text-warning" invisible="quota_status != 'no_plan'">
+                                    <field name="forecast_balance" nolabel="1"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-muted small mt-2">
+                        Pipeline is
+                        <field name="applicant_headcount" class="oe_inline" nolabel="1"/> applicants +
+                        <field name="pending_request_headcount" class="oe_inline" nolabel="1"/> pending +
+                        <field name="approved_open_headcount" class="oe_inline" nolabel="1"/> approved still open.
+                        Approved still open includes seats waiting for Fill seats and seats already opened for recruitment.
+                        On a department, Current is employees in that department, job, and contract type. On a project, Current is employees assigned to that project in this job, limited to the target phase when one is set.
+                    </div>
+                    <div class="alert alert-danger mt-3 mb-0" role="alert" invisible="quota_status != 'exceeds_plan'">
+                        This request is over the quota set on the manpower plan. Net remaining after this request is
+                        <field name="forecast_balance" class="oe_inline" nolabel="1"/>.
+                    </div>
+                    <div class="alert alert-warning mt-3 mb-0" role="alert" invisible="quota_status != 'no_plan'">
+                        No approved manpower plan line covers this department or project, job, contract type or phase, and date.
+                    </div>
+                    <div class="alert alert-info mt-3 mb-0" role="alert"
+                        invisible="request_status != 'approved' or manpower_unfilled_headcount &lt; 1">
+                        <field name="manpower_unfilled_headcount" class="oe_inline" nolabel="1"/>
+                        seat(s) are waiting. Fill seats records a project transfer, an internal transfer, a promotion, or opens the job.
+                    </div>
+                </div>
+            </xpath>
+            <xpath expr="//group[@name='request_details']" position="inside">
+                <field name="has_manpower_scope" invisible="1"/>
+                <field name="has_manpower_department" invisible="1"/>
+                <field name="has_manpower_project" invisible="1"/>
+                <field name="has_manpower_job" invisible="1"/>
+                <field name="has_manpower_headcount" invisible="1"/>
+                <field name="has_manpower_justification" invisible="1"/>
+                <field name="plan_scope" readonly="request_status != 'new'"
+                    invisible="not is_manpower_request or has_manpower_scope == 'no'"
+                    required="is_manpower_request and has_manpower_scope == 'required'"/>
+                <field name="department_id" readonly="request_status != 'new'"
+                    invisible="not is_manpower_request or plan_scope != 'department'"
+                    required="is_manpower_request and plan_scope == 'department'"/>
+                <field name="project_id" readonly="request_status != 'new'"
+                    invisible="not is_manpower_request or plan_scope != 'project'"
+                    required="is_manpower_request and plan_scope == 'project'"/>
+                <field name="job_id" readonly="request_status != 'new'"
+                    invisible="not is_manpower_request or has_manpower_job == 'no'"
+                    required="is_manpower_request and has_manpower_job == 'required'"/>
+                <field name="contract_type_id" readonly="request_status != 'new'"
+                    invisible="not is_manpower_request or plan_scope != 'department'"
+                    required="is_manpower_request and plan_scope == 'department'"/>
+                <field name="milestone_id" readonly="request_status != 'new'"
+                    invisible="not is_manpower_request or plan_scope != 'project'"/>
+                <field name="requested_headcount" readonly="request_status != 'new'"
+                    invisible="not is_manpower_request or has_manpower_headcount == 'no'"
+                    required="is_manpower_request and has_manpower_headcount == 'required'"/>
+                <field name="justification_reason" readonly="request_status != 'new'"
+                    invisible="not is_manpower_request or has_manpower_justification == 'no'"
+                    required="is_manpower_request and has_manpower_justification == 'required'"/>
+            </xpath>
+            <xpath expr="//page[@name='description']" position="after">
+                <page string="Filled seats" name="manpower_seats" invisible="not is_manpower_request" groups="hr.group_hr_user">
+                    <field name="manpower_seat_ids" readonly="1">
+                        <list>
+                            <field name="fill_type"/>
+                            <field name="employee_id" widget="many2one_avatar_employee"/>
+                            <field name="create_date" string="Filled on"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="approval_request_view_list_manpower" model="ir.ui.view">
+        <field name="name">approval.request.list.manpower</field>
+        <field name="model">approval.request</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="request_owner_id" widget="many2one_avatar_user"/>
+                <field name="plan_scope"/>
+                <field name="department_id"/>
+                <field name="project_id"/>
+                <field name="job_id"/>
+                <field name="contract_type_id" optional="show"/>
+                <field name="milestone_id" optional="show"/>
+                <field name="requested_headcount"/>
+                <field name="forecast_balance"/>
+                <field name="quota_status" widget="badge"
+                    decoration-success="quota_status == 'within_plan'"
+                    decoration-danger="quota_status == 'exceeds_plan'"
+                    decoration-warning="quota_status == 'no_plan'"/>
+                <field name="request_status" widget="badge"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="approval_request_action_manpower" model="ir.actions.act_window">
+        <field name="name">Manpower Requests</field>
+        <field name="res_model">approval.request</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('is_manpower_request', '=', True)]</field>
+    </record>
+    <record id="approval_request_action_manpower_view_list" model="ir.actions.act_window.view">
+        <field name="sequence">1</field>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="approval_request_view_list_manpower"/>
+        <field name="act_window_id" ref="approval_request_action_manpower"/>
+    </record>
+    <record id="approval_request_action_manpower_view_form" model="ir.actions.act_window.view">
+        <field name="sequence">2</field>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="approvals.approval_request_view_form"/>
+        <field name="act_window_id" ref="approval_request_action_manpower"/>
+    </record>
+</odoo>

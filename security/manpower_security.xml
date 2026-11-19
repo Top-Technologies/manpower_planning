@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_manpower_plan_company_rule" model="ir.rule">
+        <field name="name">Manpower plan: multi-company</field>
+        <field name="model_id" ref="model_hr_manpower_plan"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="hr_manpower_plan_line_company_rule" model="ir.rule">
+        <field name="name">Manpower plan line: multi-company</field>
+        <field name="model_id" ref="model_hr_manpower_plan_line"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+    <record id="manpower_request_seat_company_rule" model="ir.rule">
+        <field name="name">Manpower seat: multi-company</field>
+        <field name="model_id" ref="model_manpower_request_seat"/>
+        <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+    </record>
+
+    <record id="hr_manpower_plan_hr_rule" model="ir.rule">
+        <field name="name">Manpower plan: HR officers</field>
+        <field name="model_id" ref="model_hr_manpower_plan"/>
+        <field name="groups" eval="[(4, ref('hr.group_hr_user'))]"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="hr_manpower_plan_hr_manager_rule" model="ir.rule">
+        <field name="name">Manpower plan: HR managers</field>
+        <field name="model_id" ref="model_hr_manpower_plan"/>
+        <field name="groups" eval="[(4, ref('hr.group_hr_manager'))]"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="True"/>
+    </record>
+    <record id="hr_manpower_plan_approval_rule" model="ir.rule">
+        <field name="name">Manpower plan: approval officers</field>
+        <field name="model_id" ref="model_hr_manpower_plan"/>
+        <field name="groups" eval="[(4, ref('approvals.group_approval_user'))]"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="hr_manpower_plan_owner_rule" model="ir.rule">
+        <field name="name">Manpower plan: department or project manager</field>
+        <field name="model_id" ref="model_hr_manpower_plan"/>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="domain_force">['|',
+            '&amp;', ('plan_scope', '=', 'department'), ('department_id.manager_id.user_id', '=', user.id),
+            '&amp;', ('plan_scope', '=', 'project'), ('project_id.user_id', '=', user.id)]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="hr_manpower_plan_project_rule" model="ir.rule">
+        <field name="name">Manpower plan: project planner</field>
+        <field name="model_id" ref="model_hr_manpower_plan"/>
+        <field name="groups" eval="[(4, ref('project.group_project_user'))]"/>
+        <field name="domain_force">['&amp;', ('plan_scope', '=', 'project'), ('project_id.user_id', '=', user.id)]</field>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="hr_manpower_plan_line_hr_rule" model="ir.rule">
+        <field name="name">Manpower plan line: HR officers</field>
+        <field name="model_id" ref="model_hr_manpower_plan_line"/>
+        <field name="groups" eval="[(4, ref('hr.group_hr_user'))]"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="hr_manpower_plan_line_hr_manager_rule" model="ir.rule">
+        <field name="name">Manpower plan line: HR managers</field>
+        <field name="model_id" ref="model_hr_manpower_plan_line"/>
+        <field name="groups" eval="[(4, ref('hr.group_hr_manager'))]"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+    </record>
+    <record id="hr_manpower_plan_line_approval_rule" model="ir.rule">
+        <field name="name">Manpower plan line: approval officers</field>
+        <field name="model_id" ref="model_hr_manpower_plan_line"/>
+        <field name="groups" eval="[(4, ref('approvals.group_approval_user'))]"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="hr_manpower_plan_line_owner_rule" model="ir.rule">
+        <field name="name">Manpower plan line: department or project manager</field>
+        <field name="model_id" ref="model_hr_manpower_plan_line"/>
+        <field name="groups" eval="[(4, ref('base.group_user'))]"/>
+        <field name="domain_force">['|',
+            '&amp;', ('plan_id.plan_scope', '=', 'department'), ('plan_id.department_id.manager_id.user_id', '=', user.id),
+            '&amp;', ('plan_id.plan_scope', '=', 'project'), ('plan_id.project_id.user_id', '=', user.id)]</field>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+    <record id="hr_manpower_plan_line_project_rule" model="ir.rule">
+        <field name="name">Manpower plan line: project planner</field>
+        <field name="model_id" ref="model_hr_manpower_plan_line"/>
+        <field name="groups" eval="[(4, ref('project.group_project_user'))]"/>
+        <field name="domain_force">['&amp;', ('plan_id.plan_scope', '=', 'project'), ('plan_id.project_id.user_id', '=', user.id)]</field>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+</odoo>

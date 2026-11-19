@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="manpower_request_fill_view_form" model="ir.ui.view">
+        <field name="name">manpower.request.fill.form</field>
+        <field name="model">manpower.request.fill</field>
+        <field name="arch" type="xml">
+            <form string="Fill seats">
+                <div class="text-muted mb-3">
+                    Leave a row empty to fill it later.
+                    A project request accepts a project transfer, a promotion, or opening the job.
+                    A department request accepts an internal transfer, a promotion, or opening the job.
+                </div>
+                <field name="request_id" invisible="1"/>
+                <field name="plan_scope" invisible="1"/>
+                <field name="line_ids">
+                    <list editable="bottom" create="false" delete="false">
+                        <field name="company_id" column_invisible="1"/>
+                        <field name="fill_type"/>
+                        <field name="employee_id" widget="many2one_avatar_employee"
+                            readonly="fill_type == 'open_job'"
+                            required="fill_type and fill_type != 'open_job'"/>
+                    </list>
+                </field>
+                <footer>
+                    <button name="action_apply" type="object" string="Apply" class="btn-primary"/>
+                    <button string="Cancel" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

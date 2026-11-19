@@ -1,0 +1,12 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_hr_manpower_plan_user,hr.manpower.plan.user,model_hr_manpower_plan,base.group_user,1,0,0,0
+access_hr_manpower_plan_manager,hr.manpower.plan.manager,model_hr_manpower_plan,hr.group_hr_manager,1,1,1,1
+access_hr_manpower_plan_project,hr.manpower.plan.project,model_hr_manpower_plan,project.group_project_user,1,1,1,0
+access_hr_manpower_plan_line_user,hr.manpower.plan.line.user,model_hr_manpower_plan_line,base.group_user,1,0,0,0
+access_hr_manpower_plan_line_manager,hr.manpower.plan.line.manager,model_hr_manpower_plan_line,hr.group_hr_manager,1,1,1,1
+access_hr_manpower_plan_line_project,hr.manpower.plan.line.project,model_hr_manpower_plan_line,project.group_project_user,1,1,1,0
+access_manpower_request_seat_user,manpower.request.seat.user,model_manpower_request_seat,base.group_user,1,0,0,0
+access_manpower_request_seat_hr,manpower.request.seat.hr,model_manpower_request_seat,hr.group_hr_user,1,1,1,0
+access_manpower_request_seat_manager,manpower.request.seat.manager,model_manpower_request_seat,hr.group_hr_manager,1,1,1,1
+access_manpower_request_fill_hr,manpower.request.fill.hr,model_manpower_request_fill,hr.group_hr_user,1,1,1,1
+access_manpower_request_fill_line_hr,manpower.request.fill.line.hr,model_manpower_request_fill_line,hr.group_hr_user,1,1,1,1

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="approval_category_view_form_manpower" model="ir.ui.view">
+        <field name="name">approval.category.form.manpower</field>
+        <field name="model">approval.category</field>
+        <field name="inherit_id" ref="approvals.approval_category_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='option_settings']" position="inside">
+                <field name="is_manpower_request"/>
+                <field name="has_manpower_scope" string="Scope" widget="radio" options="{'horizontal': true}" invisible="not is_manpower_request"/>
+                <field name="has_manpower_department" string="Department" widget="radio" options="{'horizontal': true}" invisible="not is_manpower_request"/>
+                <field name="has_manpower_project" string="Project" widget="radio" options="{'horizontal': true}" invisible="not is_manpower_request"/>
+                <field name="has_manpower_job" string="Job Position" widget="radio" options="{'horizontal': true}" invisible="not is_manpower_request"/>
+                <field name="has_manpower_headcount" string="Headcount" widget="radio" options="{'horizontal': true}" invisible="not is_manpower_request"/>
+                <field name="has_manpower_justification" string="Justification" widget="radio" options="{'horizontal': true}" invisible="not is_manpower_request"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>

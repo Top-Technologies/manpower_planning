@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="hr_manpower_plan_view_list" model="ir.ui.view">
+        <field name="name">hr.manpower.plan.list</field>
+        <field name="model">hr.manpower.plan</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="plan_scope"/>
+                <field name="department_id"/>
+                <field name="project_id"/>
+                <field name="date_start"/>
+                <field name="date_end"/>
+                <field name="state" widget="badge"
+                    decoration-info="state == 'draft'"
+                    decoration-success="state == 'approved'"
+                    decoration-muted="state == 'closed'"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="hr_manpower_plan_view_form" model="ir.ui.view">
+        <field name="name">hr.manpower.plan.form</field>
+        <field name="model">hr.manpower.plan</field>
+        <field name="arch" type="xml">
+            <form>
+                <header>
+                    <button name="action_mark_approved" type="object" string="Approve"
+                        class="btn-primary" invisible="not can_manage_plan or state != 'draft'"/>
+                    <button name="action_close" type="object" string="Close"
+                        invisible="not can_manage_plan or state != 'approved'"/>
+                    <button name="action_reset_draft" type="object" string="Reset to Draft"
+                        invisible="not can_manage_plan or state == 'draft'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,approved,closed"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_requests" type="object" class="oe_stat_button" icon="fa-check-square-o">
+                            <field name="request_count" widget="statinfo" string="Requests"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="Project Alpha 2026" readonly="not can_manage_plan or state != 'draft'"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="can_manage_plan" invisible="1"/>
+                            <field name="plan_scope" readonly="state != 'draft'"/>
+                            <field name="department_id" readonly="not can_manage_plan or state != 'draft'"
+                                invisible="plan_scope != 'department'"
+                                required="plan_scope == 'department'"/>
+                            <field name="project_id" readonly="not can_manage_plan or state != 'draft'"
+                                invisible="plan_scope != 'project'"
+                                required="plan_scope == 'project'"/>
+                            <field name="company_id" groups="base.group_multi_company" readonly="not can_manage_plan or state != 'draft'"/>
+                        </group>
+                        <group>
+                            <field name="date_start" readonly="not can_manage_plan or state != 'draft'"/>
+                            <field name="date_end" readonly="not can_manage_plan or state != 'draft'"/>
+                            <field name="currency_id" invisible="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Positions" name="lines">
+                            <field name="line_ids" readonly="not can_manage_plan or state != 'draft'">
+                                <list editable="bottom">
+                                    <field name="company_id" column_invisible="1"/>
+                                    <field name="currency_id" column_invisible="1"/>
+                                    <field name="plan_scope" column_invisible="1"/>
+                                    <field name="project_id" column_invisible="1"/>
+                                    <field name="job_id"/>
+                                    <field name="contract_type_id"
+                                        column_invisible="parent.plan_scope != 'department'"
+                                        required="parent.plan_scope == 'department'"/>
+                                    <field name="milestone_id"
+                                        column_invisible="parent.plan_scope != 'project'"
+                                        optional="show"/>
+                                    <field name="phase_start"
+                                        column_invisible="parent.plan_scope != 'project'"
+                                        optional="show"/>
+                                    <field name="phase_end"
+                                        column_invisible="parent.plan_scope != 'project'"
+                                        optional="show"/>
+                                    <field name="planned_headcount"/>
+                                    <field name="budgeted_salary" groups="hr.group_hr_manager" optional="hide"/>
+                                    <field name="note" optional="show"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="hr_manpower_plan_view_search" model="ir.ui.view">
+        <field name="name">hr.manpower.plan.search</field>
+        <field name="model">hr.manpower.plan</field>
+        <field name="arch" type="xml">
+            <search>
+                <field name="name"/>
+                <field name="department_id"/>
+                <field name="project_id"/>
+                <filter name="approved" string="Approved" domain="[('state', '=', 'approved')]"/>
+                <filter name="department" string="Departmental" domain="[('plan_scope', '=', 'department')]"/>
+                <filter name="project" string="Project-Based" domain="[('plan_scope', '=', 'project')]"/>
+                <group>
+                    <filter name="group_scope" string="Scope" context="{'group_by': 'plan_scope'}"/>
+                    <filter name="group_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="hr_manpower_plan_action" model="ir.actions.act_window">
+        <field name="name">Manpower Planning</field>
+        <field name="res_model">hr.manpower.plan</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="hr_manpower_plan_view_search"/>
+    </record>
+</odoo>

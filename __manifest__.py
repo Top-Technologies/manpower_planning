@@ -1,0 +1,28 @@
+{
+    'name': 'Manpower Planning',
+    'version': '19.0.1.0.0',
+    'category': 'Human Resources/Approvals',
+    'summary': 'Department and project headcount plans checked on native approval requests',
+    'author': 'Top System Solutions Technologies PLC',
+    'license': 'LGPL-3',
+    'depends': [
+        'hr',
+        'hr_recruitment',
+        'project',
+        'approvals',
+        'mail',
+    ],
+    'data': [
+        'security/ir.model.access.csv',
+        'security/manpower_security.xml',
+        'data/approval_category_data.xml',
+        'views/hr_manpower_plan_views.xml',
+        'views/approval_category_views.xml',
+        'views/approval_request_views.xml',
+        'views/manpower_fill_views.xml',
+        'views/menus.xml',
+    ],
+    'post_init_hook': 'post_init_hook',
+    'installable': True,
+    'application': False,
+}

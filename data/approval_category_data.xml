@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="approval_category_manpower_request" model="approval.category">
+            <field name="name">Manpower Request</field>
+            <field name="description">Manpower requisition against an approved manpower plan.</field>
+            <field name="sequence">1</field>
+            <field name="is_manpower_request" eval="True"/>
+            <field name="has_manpower_scope">required</field>
+            <field name="has_manpower_department">required</field>
+            <field name="has_manpower_project">required</field>
+            <field name="has_manpower_job">required</field>
+            <field name="has_manpower_headcount">required</field>
+            <field name="has_manpower_justification">required</field>
+            <field name="manager_approval">required</field>
+            <field name="approver_sequence" eval="True"/>
+            <field name="approval_minimum">1</field>
+            <field name="automated_sequence" eval="True"/>
+            <field name="sequence_code">MP</field>
+            <field name="requirer_document">optional</field>
+        </record>
+    </data>
+</odoo>
