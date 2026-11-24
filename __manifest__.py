@@ -8,7 +8,6 @@
     'depends': [
         'hr',
         'hr_recruitment',
-        'project',
         'approvals',
         'mail',
     ],
