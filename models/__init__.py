@@ -1,3 +1,4 @@
+from . import department_target
 from . import hr_manpower_plan
 from . import approval_category
 from . import approval_request

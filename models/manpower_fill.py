@@ -26,6 +26,7 @@ class ManpowerRequestSeat(models.Model):
     company_id = fields.Many2one(related='request_id.company_id', store=True, index=True)
     fill_type = fields.Selection(FILL_TYPE_SELECTION, required=True)
     employee_id = fields.Many2one('hr.employee', check_company=True)
+    department_id = fields.Many2one('hr.department', check_company=True)
 
     _employee_once_per_request = models.UniqueIndex(
         '(request_id, employee_id) WHERE employee_id IS NOT NULL',
@@ -46,7 +47,7 @@ class ManpowerRequestFill(models.TransientModel):
         if not self.env.user.has_group('hr.group_hr_user'):
             raise UserError(_("Only HR can fill manpower seats."))
         self.request_id.apply_manpower_fill([
-            (line.fill_type, line.employee_id) for line in self.line_ids
+            (line.fill_type, line.employee_id, line.department_id) for line in self.line_ids
         ])
         return {'type': 'ir.actions.act_window_close'}
 
@@ -57,10 +58,15 @@ class ManpowerRequestFillLine(models.TransientModel):
 
     wizard_id = fields.Many2one('manpower.request.fill', required=True, ondelete='cascade')
     company_id = fields.Many2one(related='wizard_id.request_id.company_id')
+    department_ids = fields.Many2many(related='wizard_id.request_id.department_ids')
     fill_type = fields.Selection(FILL_TYPE_SELECTION)
     employee_id = fields.Many2one(
         'hr.employee',
         domain="[('company_id', '=', company_id), ('active', '=', True)]",
+    )
+    department_id = fields.Many2one(
+        'hr.department',
+        domain="[('id', 'in', department_ids)]",
     )
 
     @api.onchange('fill_type')

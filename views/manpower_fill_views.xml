@@ -7,7 +7,7 @@
             <form string="Fill seats">
                 <div class="text-muted mb-3">
                     Leave a row empty to fill it later.
-                    A project request accepts a project transfer, a promotion, or opening the job.
+                    A project request accepts a project transfer into one of its departments, a promotion, or opening the job.
                     A department request accepts an internal transfer, a promotion, or opening the job.
                 </div>
                 <field name="request_id" invisible="1"/>
@@ -15,7 +15,11 @@
                 <field name="line_ids">
                     <list editable="bottom" create="false" delete="false">
                         <field name="company_id" column_invisible="1"/>
+                        <field name="department_ids" column_invisible="1"/>
                         <field name="fill_type"/>
+                        <field name="department_id"
+                            invisible="parent.plan_scope != 'project' or fill_type in (False, 'open_job')"
+                            required="parent.plan_scope == 'project' and fill_type and fill_type != 'open_job'"/>
                         <field name="employee_id" widget="many2one_avatar_employee"
                             readonly="fill_type == 'open_job'"
                             required="fill_type and fill_type != 'open_job'"/>

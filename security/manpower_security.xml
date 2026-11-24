@@ -52,20 +52,10 @@
         <field name="groups" eval="[(4, ref('base.group_user'))]"/>
         <field name="domain_force">['|',
             '&amp;', ('plan_scope', '=', 'department'), ('department_id.manager_id.user_id', '=', user.id),
-            '&amp;', ('plan_scope', '=', 'project'), ('project_id.user_id', '=', user.id)]</field>
+            '&amp;', ('plan_scope', '=', 'project'), ('department_ids.manager_id.user_id', '=', user.id)]</field>
         <field name="perm_read" eval="True"/>
         <field name="perm_write" eval="False"/>
         <field name="perm_create" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-    </record>
-    <record id="hr_manpower_plan_project_rule" model="ir.rule">
-        <field name="name">Manpower plan: project planner</field>
-        <field name="model_id" ref="model_hr_manpower_plan"/>
-        <field name="groups" eval="[(4, ref('project.group_project_user'))]"/>
-        <field name="domain_force">['&amp;', ('plan_scope', '=', 'project'), ('project_id.user_id', '=', user.id)]</field>
-        <field name="perm_read" eval="True"/>
-        <field name="perm_write" eval="True"/>
-        <field name="perm_create" eval="True"/>
         <field name="perm_unlink" eval="False"/>
     </record>
 
@@ -99,16 +89,9 @@
         <field name="groups" eval="[(4, ref('base.group_user'))]"/>
         <field name="domain_force">['|',
             '&amp;', ('plan_id.plan_scope', '=', 'department'), ('plan_id.department_id.manager_id.user_id', '=', user.id),
-            '&amp;', ('plan_id.plan_scope', '=', 'project'), ('plan_id.project_id.user_id', '=', user.id)]</field>
+            '&amp;', ('plan_id.plan_scope', '=', 'project'), ('plan_id.department_ids.manager_id.user_id', '=', user.id)]</field>
         <field name="perm_write" eval="False"/>
         <field name="perm_create" eval="False"/>
-        <field name="perm_unlink" eval="False"/>
-    </record>
-    <record id="hr_manpower_plan_line_project_rule" model="ir.rule">
-        <field name="name">Manpower plan line: project planner</field>
-        <field name="model_id" ref="model_hr_manpower_plan_line"/>
-        <field name="groups" eval="[(4, ref('project.group_project_user'))]"/>
-        <field name="domain_force">['&amp;', ('plan_id.plan_scope', '=', 'project'), ('plan_id.project_id.user_id', '=', user.id)]</field>
         <field name="perm_unlink" eval="False"/>
     </record>
 </odoo>
