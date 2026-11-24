@@ -51,11 +51,11 @@ class HrApplicant(models.Model):
                 ('plan_scope', '=', 'department'),
                 ('department_id', '=', self.department_id.id),
             ], order='date_confirmed, id', limit=1)
-        if not request:
-            request = Request.search(
-                base + [('plan_scope', '=', 'project')],
-                order='date_confirmed, id', limit=1,
-            )
+            if not request:
+                request = Request.search(base + [
+                    ('plan_scope', '=', 'project'),
+                    ('department_ids', 'in', self.department_id.id),
+                ], order='date_confirmed, id', limit=1)
         if not request:
             request = Request.search(base, order='date_confirmed, id', limit=1)
         if not request:

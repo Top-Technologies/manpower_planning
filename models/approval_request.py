@@ -7,7 +7,8 @@ from .manpower_fill import FILL_TYPES_BY_SCOPE
 
 
 class ApprovalRequest(models.Model):
-    _inherit = 'approval.request'
+    _name = 'approval.request'
+    _inherit = ['approval.request', 'manpower.department.target']
 
     is_manpower_request = fields.Boolean(
         related='category_id.is_manpower_request', store=True, index=True,
@@ -29,19 +30,20 @@ class ApprovalRequest(models.Model):
         'hr.department', tracking=True, check_company=True,
         domain="[('company_id', '=', company_id)]",
     )
-    project_id = fields.Many2one(
-        'project.project', tracking=True, check_company=True,
-        domain="['|', ('company_id', '=', False), ('company_id', '=', company_id)]",
+    department_ids = fields.Many2many(
+        'hr.department',
+        'approval_request_manpower_department_rel',
+        'request_id',
+        'department_id',
+        string="Departments",
+        check_company=True,
+        domain="[('company_id', '=', company_id)]",
     )
     job_id = fields.Many2one(
         'hr.job', tracking=True, check_company=True,
         domain="['|', ('company_id', '=', False), ('company_id', '=', company_id)]",
     )
     contract_type_id = fields.Many2one('hr.contract.type', string="Contract Type", tracking=True)
-    milestone_id = fields.Many2one(
-        'project.milestone', string="Target Phase", tracking=True,
-        domain="[('project_id', '=', project_id)]",
-    )
     requested_headcount = fields.Integer(default=1, tracking=True)
     justification_reason = fields.Selection(
         [
@@ -84,27 +86,34 @@ class ApprovalRequest(models.Model):
         compute_sudo=True,
     )
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        requests = super().create(vals_list)
+        requests._materialize_project_departments()
+        return requests
+
+    def write(self, vals):
+        res = super().write(vals)
+        if not self.env.context.get('skip_department_materialize'):
+            self._materialize_project_departments()
+        return res
+
     @api.onchange('plan_scope')
     def _onchange_plan_scope(self):
         if self.plan_scope == 'department':
-            self.project_id = False
-            self.milestone_id = False
+            self.department_ids = [Command.clear()]
+            self.department_mode = 'existing'
+            self.new_department_name = False
         elif self.plan_scope == 'project':
             self.department_id = False
-            self.contract_type_id = False
-
-    @api.onchange('project_id')
-    def _onchange_project_id(self):
-        if self.milestone_id and self.milestone_id.project_id != self.project_id:
-            self.milestone_id = False
 
     def _manpower_inputs_ready(self):
         self.ensure_one()
-        if not self.is_manpower_request or not self.job_id or not self.plan_scope:
+        if not self.is_manpower_request or not self.job_id or not self.plan_scope or not self.contract_type_id:
             return False
         if self.plan_scope == 'department':
-            return bool(self.department_id and self.contract_type_id)
-        return bool(self.project_id)
+            return bool(self.department_id)
+        return bool(self.department_ids)
 
     def _manpower_zero_vals(self, is_manpower):
         return {
@@ -122,8 +131,8 @@ class ApprovalRequest(models.Model):
         }
 
     @api.depends(
-        'is_manpower_request', 'plan_scope', 'department_id', 'project_id',
-        'job_id', 'contract_type_id', 'milestone_id', 'requested_headcount',
+        'is_manpower_request', 'plan_scope', 'department_id', 'department_ids',
+        'job_id', 'contract_type_id', 'requested_headcount',
         'company_id', 'request_status', 'manpower_open_headcount',
         'manpower_unfilled_headcount',
     )
@@ -181,53 +190,31 @@ class ApprovalRequest(models.Model):
         if self.plan_scope == 'department':
             domain.append(('department_id', '=', self.department_id.id))
         else:
-            domain.append(('project_id', '=', self.project_id.id))
+            plans = self.env['hr.manpower.plan'].search(domain, order='date_start desc, id desc')
+            wanted = set(self.department_ids.ids)
+            return plans.filtered(lambda plan: wanted and wanted <= set(plan.department_ids.ids))[:1]
         return self.env['hr.manpower.plan'].search(domain, order='date_start desc, id desc', limit=1)
 
     def _matching_plan_line(self, plan, day):
         self.ensure_one()
-        lines = plan.line_ids.filtered(lambda line: line.job_id == self.job_id)
-        if self.plan_scope == 'department':
-            lines = lines.filtered(lambda line: line.contract_type_id == self.contract_type_id)
-        else:
-            lines = lines.filtered(
-                lambda line: line.milestone_id == self.milestone_id and line._covers_date(day)
-            )
+        lines = plan.line_ids.filtered(
+            lambda line: line.job_id == self.job_id and line.contract_type_id == self.contract_type_id
+        )
         return lines[:1]
 
     def _manpower_actual_headcount(self):
-        """Current seats already filled.
-
-        Department: active employees in that department, job, and contract type.
-        Project: active employees in that job assigned to the project. When a
-        target phase is set, only assignees of active tasks on that milestone
-        are counted. Each employee is counted once.
-        """
+        """Active employees in the request departments, job, and contract type."""
         self.ensure_one()
-        domain = [
+        departments = self.department_id if self.plan_scope == 'department' else self.department_ids
+        if not departments:
+            return 0
+        return self.env['hr.employee'].sudo().search_count([
             ('active', '=', True),
             ('company_id', '=', self.company_id.id),
             ('job_id', '=', self.job_id.id),
-        ]
-        if self.plan_scope == 'department':
-            domain.append(('department_id', '=', self.department_id.id))
-            if self.contract_type_id:
-                domain.append(('contract_type_id', '=', self.contract_type_id.id))
-            return self.env['hr.employee'].sudo().search_count(domain)
-        task_domain = [
-            ('project_id', '=', self.project_id.id),
-            ('active', '=', True),
-        ]
-        if self.milestone_id:
-            task_domain.append(('milestone_id', '=', self.milestone_id.id))
-        tasks = self.env['project.task'].search(task_domain)
-        user_ids = set(tasks.user_ids.ids)
-        if not self.milestone_id and self.project_id.user_id:
-            user_ids.add(self.project_id.user_id.id)
-        if not user_ids:
-            return 0
-        domain.append(('user_id', 'in', list(user_ids)))
-        return self.env['hr.employee'].sudo().search_count(domain)
+            ('department_id', 'in', departments.ids),
+            ('contract_type_id', '=', self.contract_type_id.id),
+        ])
 
     def _manpower_applicant_headcount(self):
         self.ensure_one()
@@ -239,8 +226,9 @@ class ApprovalRequest(models.Model):
             ('date_closed', '=', False),
             ('stage_id.hired_stage', '=', False),
         ]
-        if self.plan_scope == 'department':
-            domain.append(('department_id', '=', self.department_id.id))
+        departments = self.department_id if self.plan_scope == 'department' else self.department_ids
+        if departments:
+            domain.append(('department_id', 'in', departments.ids))
         return self.env['hr.applicant'].search_count(domain)
 
     def _sibling_request_domain(self):
@@ -255,10 +243,9 @@ class ApprovalRequest(models.Model):
             domain.append(('id', '!=', self.id))
         if self.plan_scope == 'department':
             domain.append(('department_id', '=', self.department_id.id))
-            domain.append(('contract_type_id', '=', self.contract_type_id.id))
-        else:
-            domain.append(('project_id', '=', self.project_id.id))
-            domain.append(('milestone_id', '=', self.milestone_id.id or False))
+        elif self.department_key:
+            domain.append(('department_key', '=', self.department_key))
+        domain.append(('contract_type_id', '=', self.contract_type_id.id))
         return domain
 
     def _sum_sibling_requests(self, extra_domain, field_name):
@@ -294,10 +281,12 @@ class ApprovalRequest(models.Model):
             labels.append(_("Scope"))
         if self.plan_scope == 'department' and not self.department_id:
             labels.append(_("Department"))
-        if self.plan_scope == 'department' and not self.contract_type_id:
+        if not self.contract_type_id:
             labels.append(_("Contract Type"))
-        if self.plan_scope == 'project' and not self.project_id:
-            labels.append(_("Project"))
+        if self.plan_scope == 'project' and not self.department_ids and not (
+            self.department_mode == 'create' and (self.new_department_name or '').strip()
+        ):
+            labels.append(_("Department"))
         if not self.job_id:
             labels.append(_("Job Position"))
         if not self.justification_reason:
@@ -311,9 +300,10 @@ class ApprovalRequest(models.Model):
             raise ValidationError(_("Requested headcount must be at least 1."))
 
     def action_confirm(self):
-        for request in self:
-            if request.is_manpower_request:
-                request._check_manpower_ready()
+        manpower = self.filtered('is_manpower_request')
+        manpower._materialize_project_departments()
+        for request in manpower:
+            request._check_manpower_ready()
         return super().action_confirm()
 
     def _sync_manpower_execution(self, previous_status):
@@ -355,9 +345,15 @@ class ApprovalRequest(models.Model):
             raise UserError(_("Only HR can fill manpower seats."))
         if self.request_status != 'approved' or self.manpower_unfilled_headcount < 1:
             raise UserError(_("There is no empty seat to fill."))
+        departments = self.department_ids
+        line_vals = {}
+        if len(departments) == 1:
+            line_vals['department_id'] = departments.id
         wizard = self.env['manpower.request.fill'].create({
             'request_id': self.id,
-            'line_ids': [Command.create({}) for _index in range(self.manpower_unfilled_headcount)],
+            'line_ids': [
+                Command.create(line_vals) for _index in range(self.manpower_unfilled_headcount)
+            ],
         })
         return {
             'type': 'ir.actions.act_window',
@@ -372,7 +368,11 @@ class ApprovalRequest(models.Model):
         self.ensure_one()
         if self.request_status != 'approved':
             raise UserError(_("Fill seats is available after the request is approved."))
-        chosen = [(fill_type, employee) for fill_type, employee in choices if fill_type]
+        chosen = [
+            (fill_type, employee, department)
+            for fill_type, employee, department in choices
+            if fill_type
+        ]
         if not chosen:
             raise UserError(_("Choose how to fill at least one seat. An empty row stays open."))
         if len(chosen) > self.manpower_unfilled_headcount:
@@ -381,14 +381,17 @@ class ApprovalRequest(models.Model):
                 qty=self.manpower_unfilled_headcount,
             ))
         seen = self.env['hr.employee']
-        for fill_type, employee in chosen:
-            self._check_fill_choice(fill_type, employee)
+        resolved = []
+        for fill_type, employee, department in chosen:
+            target = self._target_department(fill_type, department)
+            self._check_fill_choice(fill_type, employee, target)
             if fill_type != 'open_job' and employee in seen:
                 raise UserError(_("%s is selected on more than one seat.", employee.display_name))
             if fill_type != 'open_job':
                 seen |= employee
+            resolved.append((fill_type, employee, target))
         open_quantity = 0
-        for fill_type, employee in chosen:
+        for fill_type, employee, target in resolved:
             if fill_type == 'open_job':
                 open_quantity += 1
                 self.env['manpower.request.seat'].sudo().create({
@@ -396,11 +399,12 @@ class ApprovalRequest(models.Model):
                     'fill_type': 'open_job',
                 })
                 continue
-            self._apply_employee_fill(fill_type, employee)
+            self._apply_employee_fill(fill_type, employee, target)
             self.env['manpower.request.seat'].sudo().create({
                 'request_id': self.id,
                 'fill_type': fill_type,
                 'employee_id': employee.id,
+                'department_id': target.id,
             })
         self.sudo().write({
             'manpower_unfilled_headcount': self.manpower_unfilled_headcount - len(chosen),
@@ -408,7 +412,19 @@ class ApprovalRequest(models.Model):
         if open_quantity:
             self._open_manpower_recruitment(open_quantity)
 
-    def _check_fill_choice(self, fill_type, employee):
+    def _target_department(self, fill_type, department):
+        self.ensure_one()
+        if fill_type == 'open_job':
+            return self.env['hr.department']
+        if self.plan_scope == 'department':
+            return self.department_id
+        if department and department in self.department_ids:
+            return department
+        if len(self.department_ids) == 1:
+            return self.department_ids
+        raise UserError(_("Choose which department receives this employee."))
+
+    def _check_fill_choice(self, fill_type, employee, department):
         self.ensure_one()
         allowed = FILL_TYPES_BY_SCOPE.get(self.plan_scope, ())
         if fill_type not in allowed:
@@ -437,180 +453,68 @@ class ApprovalRequest(models.Model):
                 job=employee.job_id.display_name or _("without a job"),
                 target=self.job_id.display_name,
             ))
-        if self.plan_scope == 'project' and not employee.user_id:
-            raise UserError(_(
-                "%s needs a related user. Project headcount counts employees assigned on the project through their user.",
-                employee.display_name,
-            ))
-        if fill_type == 'project_transfer' and self._employee_on_target_project(employee):
-            raise UserError(_(
-                "%(employee)s is already assigned to %(project)s.",
-                employee=employee.display_name,
-                project=self.project_id.display_name,
-            ))
-        if fill_type == 'internal_transfer':
-            employee_sudo = employee.sudo()
-            same_department = employee_sudo.department_id == self.department_id
-            same_contract = (
-                not self.contract_type_id
-                or employee_sudo.contract_type_id == self.contract_type_id
-            )
-            if same_department and same_contract:
-                raise UserError(_(
-                    "%(employee)s is already in %(department)s for this contract type.",
-                    employee=employee.display_name,
-                    department=self.department_id.display_name,
-                ))
+        if fill_type in ('internal_transfer', 'project_transfer'):
+            self._assert_not_already_in_department(employee, department)
 
-    def _apply_employee_fill(self, fill_type, employee):
+    def _assert_not_already_in_department(self, employee, department):
+        employee_sudo = employee.sudo()
+        same_department = employee_sudo.department_id == department
+        same_contract = (
+            not self.contract_type_id
+            or employee_sudo.contract_type_id == self.contract_type_id
+        )
+        if same_department and same_contract:
+            raise UserError(_(
+                "%(employee)s is already in %(department)s for this contract type.",
+                employee=employee.display_name,
+                department=department.display_name,
+            ))
+
+    def _apply_employee_fill(self, fill_type, employee, department):
         self.ensure_one()
-        if fill_type == 'internal_transfer':
-            vals = {'department_id': self.department_id.id}
-            if self.contract_type_id:
-                vals['contract_type_id'] = self.contract_type_id.id
-            employee.sudo().write(vals)
+        vals = {'department_id': department.id}
+        if self.contract_type_id:
+            vals['contract_type_id'] = self.contract_type_id.id
+        if fill_type == 'promotion':
+            vals['job_id'] = self.job_id.id
+        previous = employee.sudo().department_id
+        employee.sudo().write(vals)
+        if fill_type == 'promotion':
             employee.message_post(body=_(
-                "Internal transfer to %(department)s from manpower request %(request)s.",
-                department=self.department_id.display_name,
+                "Promoted to %(job)s in %(department)s from manpower request %(request)s.",
+                job=self.job_id.display_name,
+                department=department.display_name,
                 request=self.display_name,
             ))
             self.message_post(body=_(
-                "%(employee)s filled one seat by internal transfer to %(department)s.",
+                "%(employee)s filled one seat by promotion to %(job)s in %(department)s.",
                 employee=employee.display_name,
-                department=self.department_id.display_name,
-            ))
-            return
-        if fill_type == 'promotion':
-            vals = {'job_id': self.job_id.id}
-            if self.plan_scope == 'department':
-                vals['department_id'] = self.department_id.id
-                if self.contract_type_id:
-                    vals['contract_type_id'] = self.contract_type_id.id
-            employee.sudo().write(vals)
-            if self.plan_scope == 'project':
-                self._move_employee_onto_project(employee)
-            employee.message_post(body=_(
-                "Promoted to %(job)s from manpower request %(request)s.",
                 job=self.job_id.display_name,
-                request=self.display_name,
+                department=department.display_name,
             ))
-            if self.plan_scope == 'project':
-                self.message_post(body=_(
-                    "%(employee)s filled one seat by promotion to %(job)s on %(project)s.",
-                    employee=employee.display_name,
-                    job=self.job_id.display_name,
-                    project=self.project_id.display_name,
-                ))
-            else:
-                self.message_post(body=_(
-                    "%(employee)s filled one seat by promotion to %(job)s.",
-                    employee=employee.display_name,
-                    job=self.job_id.display_name,
-                ))
             return
-        source_names = self._move_employee_onto_project(employee)
+        label = _("project transfer") if fill_type == 'project_transfer' else _("internal transfer")
         employee.message_post(body=_(
-            "Transferred to project %(project)s from manpower request %(request)s.",
-            project=self.project_id.display_name,
+            "Moved to %(department)s by %(kind)s from manpower request %(request)s.",
+            department=department.display_name,
+            kind=label,
             request=self.display_name,
         ))
-        if source_names:
+        if previous and previous != department:
             self.message_post(body=_(
-                "%(employee)s filled one seat by project transfer from %(source)s to %(project)s.",
+                "%(employee)s filled one seat by %(kind)s from %(source)s to %(department)s.",
                 employee=employee.display_name,
-                source=", ".join(source_names),
-                project=self.project_id.display_name,
+                kind=label,
+                source=previous.display_name,
+                department=department.display_name,
             ))
         else:
             self.message_post(body=_(
-                "%(employee)s filled one seat by project transfer to %(project)s.",
+                "%(employee)s filled one seat by %(kind)s to %(department)s.",
                 employee=employee.display_name,
-                project=self.project_id.display_name,
+                kind=label,
+                department=department.display_name,
             ))
-
-    def _employee_on_target_project(self, employee):
-        self.ensure_one()
-        user = employee.user_id
-        if not user:
-            return False
-        domain = [
-            ('project_id', '=', self.project_id.id),
-            ('active', '=', True),
-            ('user_ids', 'in', user.id),
-        ]
-        if self.milestone_id:
-            domain.append(('milestone_id', '=', self.milestone_id.id))
-        if self.env['project.task'].sudo().search_count(domain):
-            return True
-        return not self.milestone_id and self.project_id.user_id == user
-
-    def _move_employee_onto_project(self, employee):
-        """Assign the employee to this project and take them off other projects.
-
-        Returns the names of the projects they left.
-        """
-        self.ensure_one()
-        user = employee.user_id
-        if not user:
-            raise UserError(_(
-                "%s needs a related user. Project headcount counts employees assigned on the project through their user.",
-                employee.display_name,
-            ))
-        Task = self.env['project.task'].sudo()
-        Project = self.env['project.project'].sudo()
-        other_tasks = Task.search([
-            ('active', '=', True),
-            ('user_ids', 'in', user.id),
-            ('project_id', '!=', False),
-            ('project_id', '!=', self.project_id.id),
-            ('company_id', '=', self.company_id.id),
-        ])
-        source_projects = other_tasks.project_id
-        for task in other_tasks:
-            task.write({'user_ids': [Command.unlink(user.id)]})
-        managed = Project.search([
-            ('user_id', '=', user.id),
-            ('id', '!=', self.project_id.id),
-            ('company_id', '=', self.company_id.id),
-        ])
-        for project in managed:
-            project.user_id = False
-            project.message_post(body=_(
-                "%(employee)s is no longer the project manager after manpower request %(request)s.",
-                employee=employee.display_name,
-                request=self.display_name,
-            ))
-        source_projects |= managed
-        if self.milestone_id:
-            other_phase_tasks = Task.search([
-                ('active', '=', True),
-                ('project_id', '=', self.project_id.id),
-                ('user_ids', 'in', user.id),
-                ('milestone_id', '!=', self.milestone_id.id),
-            ])
-            for task in other_phase_tasks:
-                task.write({'user_ids': [Command.unlink(user.id)]})
-        domain = [
-            ('project_id', '=', self.project_id.id),
-            ('active', '=', True),
-        ]
-        if self.milestone_id:
-            domain.append(('milestone_id', '=', self.milestone_id.id))
-        task = Task.search(domain + [('user_ids', 'in', user.id)], limit=1)
-        if not task:
-            task = Task.search(domain, limit=1)
-            if task:
-                task.write({'user_ids': [Command.link(user.id)]})
-            else:
-                vals = {
-                    'name': _("Manpower assignment: %s", employee.name),
-                    'project_id': self.project_id.id,
-                    'user_ids': [Command.set([user.id])],
-                }
-                if self.milestone_id:
-                    vals['milestone_id'] = self.milestone_id.id
-                Task.create(vals)
-        return source_projects.mapped('display_name')
 
     def _open_manpower_recruitment(self, quantity):
         self.ensure_one()
@@ -637,15 +541,10 @@ class ApprovalRequest(models.Model):
         )
         if opened:
             sentence = "%s %s" % (sentence, _("The job position is now open for recruitment."))
-        if self.plan_scope == 'department' and self.contract_type_id:
+        if self.contract_type_id:
             sentence = "%s %s" % (sentence, _(
                 "Contract type: %s.",
                 self.contract_type_id.display_name,
-            ))
-        elif self.milestone_id:
-            sentence = "%s %s" % (sentence, _(
-                "Target phase: %s.",
-                self.milestone_id.display_name,
             ))
         job.message_post(body=Markup("<p>%s %s</p>") % (escape(sentence), link))
         self.message_post(body=_(

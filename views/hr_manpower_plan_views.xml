@@ -8,7 +8,7 @@
                 <field name="name"/>
                 <field name="plan_scope"/>
                 <field name="department_id"/>
-                <field name="project_id"/>
+                <field name="department_ids" widget="many2many_tags" optional="show"/>
                 <field name="date_start"/>
                 <field name="date_end"/>
                 <field name="state" widget="badge"
@@ -51,9 +51,16 @@
                             <field name="department_id" readonly="not can_manage_plan or state != 'draft'"
                                 invisible="plan_scope != 'department'"
                                 required="plan_scope == 'department'"/>
-                            <field name="project_id" readonly="not can_manage_plan or state != 'draft'"
+                            <field name="department_mode" readonly="not can_manage_plan or state != 'draft'"
                                 invisible="plan_scope != 'project'"
                                 required="plan_scope == 'project'"/>
+                            <field name="department_ids" widget="many2many_tags"
+                                readonly="not can_manage_plan or state != 'draft'"
+                                invisible="plan_scope != 'project' or department_mode == 'create'"
+                                required="plan_scope == 'project' and department_mode == 'existing'"/>
+                            <field name="new_department_name" readonly="not can_manage_plan or state != 'draft'"
+                                invisible="plan_scope != 'project' or department_mode != 'create'"
+                                required="plan_scope == 'project' and department_mode == 'create'"/>
                             <field name="company_id" groups="base.group_multi_company" readonly="not can_manage_plan or state != 'draft'"/>
                         </group>
                         <group>
@@ -69,20 +76,8 @@
                                     <field name="company_id" column_invisible="1"/>
                                     <field name="currency_id" column_invisible="1"/>
                                     <field name="plan_scope" column_invisible="1"/>
-                                    <field name="project_id" column_invisible="1"/>
                                     <field name="job_id"/>
-                                    <field name="contract_type_id"
-                                        column_invisible="parent.plan_scope != 'department'"
-                                        required="parent.plan_scope == 'department'"/>
-                                    <field name="milestone_id"
-                                        column_invisible="parent.plan_scope != 'project'"
-                                        optional="show"/>
-                                    <field name="phase_start"
-                                        column_invisible="parent.plan_scope != 'project'"
-                                        optional="show"/>
-                                    <field name="phase_end"
-                                        column_invisible="parent.plan_scope != 'project'"
-                                        optional="show"/>
+                                    <field name="contract_type_id" required="1"/>
                                     <field name="planned_headcount"/>
                                     <field name="budgeted_salary" groups="hr.group_hr_manager" optional="hide"/>
                                     <field name="note" optional="show"/>
@@ -103,7 +98,7 @@
             <search>
                 <field name="name"/>
                 <field name="department_id"/>
-                <field name="project_id"/>
+                <field name="department_ids"/>
                 <filter name="approved" string="Approved" domain="[('state', '=', 'approved')]"/>
                 <filter name="department" string="Departmental" domain="[('plan_scope', '=', 'department')]"/>
                 <filter name="project" string="Project-Based" domain="[('plan_scope', '=', 'project')]"/>

@@ -1,11 +1,11 @@
-from odoo import api, fields, models, _
+from odoo import Command, api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 
 
 class HrManpowerPlan(models.Model):
     _name = 'hr.manpower.plan'
     _description = 'Manpower Plan'
-    _inherit = ['mail.thread', 'mail.activity.mixin']
+    _inherit = ['mail.thread', 'mail.activity.mixin', 'manpower.department.target']
     _order = 'date_start desc, id desc'
     _check_company_auto = True
 
@@ -27,9 +27,14 @@ class HrManpowerPlan(models.Model):
         'hr.department', check_company=True, tracking=True, index=True,
         domain="[('company_id', '=', company_id)]",
     )
-    project_id = fields.Many2one(
-        'project.project', check_company=True, tracking=True, index=True,
-        domain="['|', ('company_id', '=', False), ('company_id', '=', company_id)]",
+    department_ids = fields.Many2many(
+        'hr.department',
+        'hr_manpower_plan_department_rel',
+        'plan_id',
+        'department_id',
+        string="Departments",
+        check_company=True,
+        domain="[('company_id', '=', company_id)]",
     )
     date_start = fields.Date(required=True, tracking=True, index=True)
     date_end = fields.Date(required=True, tracking=True, index=True)
@@ -37,18 +42,25 @@ class HrManpowerPlan(models.Model):
     request_count = fields.Integer(compute='_compute_request_count')
     can_manage_plan = fields.Boolean(compute='_compute_can_manage_plan')
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        plans = super().create(vals_list)
+        plans._materialize_project_departments()
+        return plans
+
+    def write(self, vals):
+        res = super().write(vals)
+        if not self.env.context.get('skip_department_materialize'):
+            self._materialize_project_departments()
+        return res
+
     @api.depends_context('uid')
-    @api.depends('plan_scope', 'project_id.user_id')
     def _compute_can_manage_plan(self):
         is_hr_manager = self.env.user.has_group('hr.group_hr_manager')
-        is_project_user = self.env.user.has_group('project.group_project_user')
         for plan in self:
-            owns_project = plan.plan_scope != 'department' and (
-                not plan.project_id or plan.project_id.user_id == self.env.user
-            )
-            plan.can_manage_plan = is_hr_manager or (is_project_user and owns_project)
+            plan.can_manage_plan = is_hr_manager
 
-    @api.depends('plan_scope', 'department_id', 'project_id', 'line_ids.job_id', 'company_id')
+    @api.depends('plan_scope', 'department_id', 'department_ids', 'line_ids.job_id', 'company_id')
     def _compute_request_count(self):
         Request = self.env['approval.request'].sudo()
         for plan in self:
@@ -57,23 +69,27 @@ class HrManpowerPlan(models.Model):
     @api.onchange('plan_scope')
     def _onchange_plan_scope(self):
         if self.plan_scope == 'department':
-            self.project_id = False
-            for line in self.line_ids:
-                line.milestone_id = False
-                line.phase_start = False
-                line.phase_end = False
+            self.department_ids = [Command.clear()]
+            self.department_mode = 'existing'
+            self.new_department_name = False
         elif self.plan_scope == 'project':
             self.department_id = False
-            for line in self.line_ids:
-                line.contract_type_id = False
 
-    @api.constrains('plan_scope', 'department_id', 'project_id')
+    @api.constrains('plan_scope', 'department_id', 'department_ids', 'department_mode', 'new_department_name')
     def _check_scope_target(self):
         for plan in self:
             if plan.plan_scope == 'department' and not plan.department_id:
                 raise ValidationError(_("A departmental plan needs a department."))
-            if plan.plan_scope == 'project' and not plan.project_id:
-                raise ValidationError(_("A project plan needs a project."))
+            if plan.plan_scope == 'project' and not plan._has_project_departments():
+                raise ValidationError(_(
+                    "A project plan needs departments. Use existing departments or create one."
+                ))
+
+    def _has_project_departments(self):
+        self.ensure_one()
+        if self.department_ids:
+            return True
+        return self.department_mode == 'create' and bool((self.new_department_name or '').strip())
 
     @api.constrains('date_start', 'date_end')
     def _check_dates(self):
@@ -82,7 +98,7 @@ class HrManpowerPlan(models.Model):
                 raise ValidationError(_("The plan end date must be on or after the start date."))
 
     @api.constrains(
-        'state', 'plan_scope', 'department_id', 'project_id',
+        'state', 'plan_scope', 'department_id', 'department_ids',
         'date_start', 'date_end', 'company_id',
     )
     def _check_approved_overlap(self):
@@ -97,11 +113,14 @@ class HrManpowerPlan(models.Model):
             ]
             if plan.plan_scope == 'department':
                 domain.append(('department_id', '=', plan.department_id.id))
+                overlap = self.sudo().search_count(domain)
             else:
-                domain.append(('project_id', '=', plan.project_id.id))
-            if self.sudo().search_count(domain):
+                others = self.sudo().search(domain)
+                departments = set(plan.department_ids.ids)
+                overlap = others.filtered(lambda other: departments & set(other.department_ids.ids))
+            if overlap:
                 raise ValidationError(_(
-                    "Another approved manpower plan already covers this period for the same department or project."
+                    "Another approved manpower plan already covers this period for the same department."
                 ))
 
     def _request_domain(self):
@@ -114,13 +133,13 @@ class HrManpowerPlan(models.Model):
         ]
         if self.plan_scope == 'department':
             domain.append(('department_id', '=', self.department_id.id))
-        else:
-            domain.append(('project_id', '=', self.project_id.id))
+        elif self.department_key:
+            domain.append(('department_key', '=', self.department_key))
         return domain
 
     def _check_can_manage(self):
         if any(not plan.can_manage_plan for plan in self):
-            raise UserError(_("You can update manpower plans for your own projects, or as an HR manager."))
+            raise UserError(_("Only an HR manager can update a manpower plan."))
 
     def action_view_requests(self):
         self.ensure_one()
@@ -150,12 +169,14 @@ class HrManpowerPlan(models.Model):
         if self.plan_scope == 'department':
             context['default_department_id'] = self.department_id.id
         elif self.plan_scope == 'project':
-            context['default_project_id'] = self.project_id.id
+            context['default_department_mode'] = 'existing'
+            context['default_department_ids'] = [Command.set(self.department_ids.ids)]
         action['context'] = context
         return action
 
     def action_mark_approved(self):
         self._check_can_manage()
+        self._materialize_project_departments()
         for plan in self:
             if plan.state != 'draft':
                 raise UserError(_("Only a draft plan can be approved."))
@@ -184,18 +205,11 @@ class HrManpowerPlanLine(models.Model):
     company_id = fields.Many2one(related='plan_id.company_id', store=True)
     currency_id = fields.Many2one(related='plan_id.currency_id')
     plan_scope = fields.Selection(related='plan_id.plan_scope')
-    project_id = fields.Many2one(related='plan_id.project_id')
     job_id = fields.Many2one(
         'hr.job', required=True, check_company=True, index=True,
         domain="['|', ('company_id', '=', False), ('company_id', '=', company_id)]",
     )
     contract_type_id = fields.Many2one('hr.contract.type', string="Contract Type")
-    milestone_id = fields.Many2one(
-        'project.milestone', string="Target Phase",
-        domain="[('project_id', '=', project_id)]",
-    )
-    phase_start = fields.Date(string="Phase Start")
-    phase_end = fields.Date(string="Phase End")
     planned_headcount = fields.Integer(string="Planned Headcount", required=True, default=0)
     budgeted_salary = fields.Monetary(currency_field='currency_id', groups='hr.group_hr_manager')
     note = fields.Text()
@@ -205,49 +219,16 @@ class HrManpowerPlanLine(models.Model):
         'Planned headcount cannot be negative.',
     )
 
-    @api.onchange('milestone_id')
-    def _onchange_milestone_id(self):
-        if self.milestone_id.deadline and not self.phase_end:
-            self.phase_end = self.milestone_id.deadline
-
-    def _covers_date(self, day):
-        self.ensure_one()
-        if self.phase_start and day < self.phase_start:
-            return False
-        if self.phase_end and day > self.phase_end:
-            return False
-        return True
-
-    @api.constrains('contract_type_id', 'plan_id')
-    def _check_contract_type(self):
-        for line in self:
-            if line.plan_id.plan_scope == 'department' and not line.contract_type_id:
-                raise ValidationError(_("A department plan line needs a contract type."))
-
-    @api.constrains('phase_start', 'phase_end', 'plan_id')
-    def _check_phase_dates(self):
-        for line in self:
-            if line.phase_start and line.phase_end and line.phase_start > line.phase_end:
-                raise ValidationError(_("The phase end must be on or after the phase start."))
-            plan = line.plan_id
-            if line.phase_start and plan.date_start and line.phase_start < plan.date_start:
-                raise ValidationError(_("The phase must start within the plan period."))
-            if line.phase_end and plan.date_end and line.phase_end > plan.date_end:
-                raise ValidationError(_("The phase must end within the plan period."))
-
-    @api.constrains('plan_id', 'job_id', 'contract_type_id', 'milestone_id')
+    @api.constrains('contract_type_id', 'plan_id', 'job_id')
     def _check_line_unique(self):
         for line in self:
-            domain = [
+            if not line.contract_type_id:
+                raise ValidationError(_("A plan line needs a contract type."))
+            duplicate = self.search_count([
                 ('id', '!=', line.id),
                 ('plan_id', '=', line.plan_id.id),
                 ('job_id', '=', line.job_id.id),
-            ]
-            if line.plan_id.plan_scope == 'department':
-                domain.append(('contract_type_id', '=', line.contract_type_id.id))
-                label = _("job and contract type")
-            else:
-                domain.append(('milestone_id', '=', line.milestone_id.id or False))
-                label = _("job and target phase")
-            if self.search_count(domain):
-                raise ValidationError(_("Each %s can appear only once on a manpower plan.", label))
+                ('contract_type_id', '=', line.contract_type_id.id),
+            ])
+            if duplicate:
+                raise ValidationError(_("Each job and contract type can appear only once on a manpower plan."))

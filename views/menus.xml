@@ -6,13 +6,7 @@
         parent="hr.menu_hr_root"
         action="hr_manpower_plan_action"
         sequence="20"
-        groups="hr.group_hr_user,project.group_project_user"/>
+        groups="hr.group_hr_user"/>
 
-    <menuitem
-        id="menu_approval_manpower_request"
-        name="Manpower Requests"
-        parent="approvals.approvals_menu_manager"
-        action="approval_request_action_manpower"
-        groups="hr.group_hr_user,approvals.group_approval_user"
-        sequence="30"/>
+    <delete model="ir.ui.menu" id="menu_approval_manpower_request"/>
 </odoo>

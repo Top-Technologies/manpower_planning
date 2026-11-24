@@ -2,7 +2,7 @@
     'name': 'Manpower Planning',
     'version': '19.0.1.0.0',
     'category': 'Human Resources/Approvals',
-    'summary': 'Department and project headcount plans checked on native approval requests',
+    'summary': 'Department and project headcount plans with department create-or-select targeting',
     'author': 'Top System Solutions Technologies PLC',
     'license': 'LGPL-3',
     'depends': [
